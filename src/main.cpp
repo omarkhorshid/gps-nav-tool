@@ -14,7 +14,6 @@ double lon_avg = 0;
 int set_flg = 0;
 int set_ctr = 0;
 int set_size =3;
-int ovr_100 = 0;
 unsigned int mode = 0; //0: Distance, 1: Displacement, 2: Coords, 3: Speed, 4: Atomic Clock
 unsigned int lst_btn_state = 0 ;
 double current_coord[2] = {0};
@@ -39,7 +38,7 @@ int distance(double p1[2], double p2[2]){
     return (int)(round((12742 * asin(sqrt(a)))*1000));
     
 }
-void conv_coord(char lat[10],char lon[10],double pos[2]){
+void convertCoords(char lat[10],char lon[10],double pos[2]){
     double deg_lat = 0;
     double deg_lon = 0;
     double dec_lat = 0;
@@ -312,7 +311,7 @@ void nextMode(){
    enableInt();
 }
 
-void distance_mode(int printEn){
+void distanceMode(int printEn){
   if((mode != 0)&&printEn){switchMode();return;}
 
     if(printEn){
@@ -346,9 +345,9 @@ void distance_mode(int printEn){
     }
         //Calculate the average location to minimize errors
         if((last_coord[0]+last_coord[1])==0){
-        conv_coord(lat,lon,last_coord);
+        convertCoords(lat,lon,last_coord);
         }else{
-            conv_coord(lat,lon,new_coord);
+            convertCoords(lat,lon,new_coord);
             if(set_flg){
             new_coord[0] = lat_avg;
             new_coord[1] = lon_avg;
@@ -395,7 +394,7 @@ void altFunc(){
   enableInt();
 }
 
-void displacement_mode(){
+void displacementMode(){
   int disp = 0;
     char sen[75]={0};
     parseSentence("GPGLL",c,sen);
@@ -414,7 +413,7 @@ void displacement_mode(){
             lon[i] = sen[i+14];
         }
     }
-      conv_coord(lat,lon,current_coord);
+      convertCoords(lat,lon,current_coord);
       if((origin_coord[0]+origin_coord[1])!=0){
         disp = distance(origin_coord,current_coord);
       }
@@ -425,11 +424,11 @@ void displacement_mode(){
     lcdClearLine(1);
     lcdPrint(disps,1);
     lcdData('m');
-    distance_mode(0);
+    distanceMode(0);
 
 }
 
-void coords_mode(){
+void coordsMode(){
   if(mode != 2){switchMode();return;}
   char sen[75]={0};
   char lat[13]={0};
@@ -457,10 +456,10 @@ void coords_mode(){
   lcdPrint((char *)lat,0);
       lcdClearLine(1);
   lcdPrint((char *)lon,1);
-  distance_mode(0);
+  distanceMode(0);
 }
 
-void speed_mode(){
+void speedMode(){
   if(mode != 3){switchMode();return;}
   char sen[75]={0};
   parseSentence("GPVTG",c,sen);
@@ -481,10 +480,10 @@ void speed_mode(){
     lcdData(unit[i]);
     i++;
   }
-  distance_mode(0);
+  distanceMode(0);
 }
 
-void time_mode(){
+void timeMode(){
   if(mode != 4){switchMode();return;}
   char sen[75]={0};
   parseSentence("GPGLL",c,sen);
@@ -514,7 +513,7 @@ void time_mode(){
     lcdData(unit[i]);
     i++;
   }
-  distance_mode(0);
+  distanceMode(0);
 }
 
 void disableInt(){
@@ -528,7 +527,7 @@ void enableInt(){
 }
 
 
-void setup (){
+void setup(){
   delay(200);
   Serial.begin(9600);
   swInit();
@@ -578,19 +577,19 @@ void loop(){
         dataReady = 0;
         switch(mode){
         case 0:
-          distance_mode(1);
+          distanceMode(1);
         break;
         case 1:
-          displacement_mode();
+          displacementMode();
         break;
         case 2:
-          coords_mode();
+          coordsMode();
         break;
         case 3:
-          speed_mode();
+          speedMode();
         break;
         case 4:
-          time_mode();
+          timeMode();
         break;
         default:
         mode = 0;
