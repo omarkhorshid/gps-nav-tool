@@ -1,0 +1,8 @@
+{
+    "files.associations": {
+        "*.html": "html",
+        "xutility": "c",
+        "arduino.h": "c",
+        "energia.h": "c"
+    }
+}
