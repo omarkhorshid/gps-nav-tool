@@ -1,24 +1,64 @@
+/*
+*   Includes
+*/
 #include "math.h"
 #include "register_definition.h"
 #include "Energia.h"
 
+
+
+/*
+*   Macros
+*/
+#define lcdClear() lcdCmd(0x01)
+#define lcdHome() lcdCmd(0x02)
+#define lcdOn() lcdCmd(0x0C)
+#define lcdClearLine(line) lcdPrint((char *)"                ",line)
+
+
+
+/*
+*   Function prototypes
+*/
+int distance(double c1[2], double c2[2]);
+void convertCoords(char lat[10],char lon[10],double ddCoord[2]);
+void lcdData(char data);
+void lcdCmd(char cmd);
+void lcdPrint(char *str , int line);
+void lcdInit(void);
+void swInit(void);
+void redLedInit(void);
+void uart2Init(void);
+char uart2Rcv(void);
+void parseSentence(char *prefix ,char *data, char sen[75]);
+void getSpeed(char *sen,char speed[10]);
+void getTime(char *sen,char time[6]);
 void disableInt();
 void enableInt();
 
-char c[512];
-bool dataReady = 0;
-int dist_sum = 0;
-double last_coord[2] = {0};
-double lat_avg = 0;
-double lon_avg = 0;
-int set_flg = 0;
-int set_ctr = 0;
-int set_size =3;
-unsigned int mode = 0; //0: Distance, 1: Displacement, 2: Coords, 3: Speed, 4: Atomic Clock
-unsigned int lst_btn_state = 0 ;
-double current_coord[2] = {0};
-double origin_coord[2] = {0};
 
+
+/*
+*   Global variables
+*/
+char gpsData[512];				//Holds the fetched GPS UART data
+bool dataReady = 0;				//Flag, indicates that new GPS data have been fetched. 1: New data available, 0: No new data
+int distSum = 0;				//Holds the total distance covered
+double lastCoord[2] = {0};		//Holds the last known coordinates
+double latAvg = 0;				//Holds the average latitude
+double lonAvg = 0;				//Holds the average longitude
+int setFlg = 0;					//Indicates that the averaging set is ready
+int setCtr = 0;					//Averaging counter
+int setSize = 3;				//Averaging set size, sets the number of points to take average of
+unsigned int mode = 0;			//Holds the mode index. 0: Distance, 1: Displacement, 2: Coords, 3: Speed, 4: Atomic Clock
+double currentCoord[2] = {0};	//Holds the current coordinates
+double originCoord[2] = {0};	//Holds the origin coordinates, used by displacement mode
+
+
+
+/*
+*   Strings
+*/
 char distStr[] = "Distance:";
 char distNoSig[] = "Distance:[!]";
 char dispStr[] = "Displacement:";
@@ -31,237 +71,397 @@ char timeNoSig[] = "Atomic Clock:[!]";
 char noGps[] = "Waiting for GPS";
 
 
-int distance(double p1[2], double p2[2]){
-    float pi = 3.141592654;
-    float p = pi/180;
-    float a = 0.5 - cos((p2[0]-p1[0])*p)/2 + cos(p1[0]*p) * cos(p2[0]*p) * (1-cos((p2[1]-p1[1])*p))/2;
-    return (int)(round((12742 * asin(sqrt(a)))*1000));
-    
-}
-void convertCoords(char lat[10],char lon[10],double pos[2]){
-    double deg_lat = 0;
-    double deg_lon = 0;
-    double dec_lat = 0;
-    double dec_lon = 0;
-    double latd = strtod(lat,NULL);
-    double lond = strtod(lon,NULL);
-    deg_lat = latd/100;
-    deg_lon = lond/100;
-    dec_lat = latd - ((int)deg_lat)*100;
-    dec_lon = lond - ((int)deg_lon)*100;
-    
-    pos[0] = (int)deg_lat+(dec_lat/60);
-    pos[1] = (int)deg_lon+(dec_lon/60);
-}
 
-
-
-void lcdData(char a){
-  disableInt();
-  GPIO_PORTA_DATA_R &=~(0x0C); //Clear RS and EN
-  GPIO_PORTA_DATA_R |= (1<<2); //RS HIGH
-  GPIO_PORTB_DATA_R =(a>>4);   //Write the upper nibble
-  GPIO_PORTA_DATA_R |=(1<<3); //EN HIGH
-  delayMicroseconds(200);
-  GPIO_PORTA_DATA_R &=~(0x0C); //Clear RS and EN
-  GPIO_PORTA_DATA_R |= (1<<2); //RS HIGH
-  GPIO_PORTB_DATA_R = a;  //Write the lower nibble
-  GPIO_PORTA_DATA_R |=(1<<3); //EN HIGH
-  delayMicroseconds(200);
-  GPIO_PORTA_DATA_R &=~(0x0C); //Clear RS and EN
-  delayMicroseconds(400);
-  enableInt();
-}
-
-void lcdCmd(char i){
-  disableInt();
-  GPIO_PORTA_DATA_R &=~(0x0C); //Clear RS and EN
-  GPIO_PORTB_DATA_R =(i>>4);
-  GPIO_PORTA_DATA_R |=(1<<3); //EN HIGH
-  delay(1);
-  GPIO_PORTA_DATA_R &=~(0x0C); //Clear RS and EN
-  GPIO_PORTB_DATA_R =(i);
-  GPIO_PORTA_DATA_R |=(1<<3); //EN HIGH
-  delay(1);
-  GPIO_PORTA_DATA_R &=~(0x0C); //Clear RS and EN
-  delay(2);
-  enableInt();
-}
-
-void lcdClear(){
-  lcdCmd(0x01);
-}
-
-void lcdHome(){
-  lcdCmd(0x02);
-}
-
-void lcdOn(){
-  lcdCmd(0x0C);
-}
-
-void lcdPrint(char *str , int line){
-  if(!line){
-      lcdCmd(0x02);
-  }else{
-      lcdCmd(0xC0);
-  }
-    int i = 0;
-    while(str[i] != '\0'){
-      lcdData(str[i]);
-      i++;
-    }
-}
-
-void lcdClearLine(int line){
-  lcdPrint((char *)"                ",line);
-}
-
-void lcdInit(){
- //Enable Ports B and A (2&3)
-  SYSCTL_RCGCGPIO_R |= 0x03; 
-  while ((SYSCTL_PRGPIO_R&0x03)==0){};
-  GPIO_PORTB_DIR_R |= 0x0F;
-  GPIO_PORTB_DEN_R |= 0x0F;
-  GPIO_PORTA_DIR_R |= 0x0C;
-  GPIO_PORTA_DEN_R |= 0x0C;
-
-
-  GPIO_PORTA_DATA_R &=~(0x0C); //Clear RS and EN
-  GPIO_PORTB_DATA_R = 0x00; //0010 4Bit mode
-  GPIO_PORTA_DATA_R |=(1<<3); //EN HIGH
-  delay(5);
-  GPIO_PORTA_DATA_R &=~(0x0C); //Clear RS and EN
-
-  delay(20);
-  //set 4 bit mode
-  GPIO_PORTA_DATA_R &=~(0x0C); //Clear RS and EN
-  GPIO_PORTB_DATA_R = 0x2; //0010 4Bit mode
-  GPIO_PORTA_DATA_R |=(1<<3); //EN HIGH
-  delay(5);
-  GPIO_PORTA_DATA_R &=~(0x0C); //Clear RS and EN
-
-  lcdCmd(0x28);
-  lcdClear();
-  lcdHome();
-  lcdOn();
-}
-
-
-void swInit(void){ // the initialization of SW1 and SW2 from port f
-  SYSCTL_RCGCGPIO_R |= 0x20;
-  while ((SYSCTL_PRGPIO_R&0x20)==0){};
-  GPIO_PORTF_LOCK_R = 0x4C4F434B;
-  GPIO_PORTF_CR_R |=0x11;
-  GPIO_PORTF_DIR_R &= ~0x11;
-  GPIO_PORTF_DEN_R |= 0x11;
-  GPIO_PORTF_PUR_R |= 0x11;
-}
-void redLedInit(void){ // the initialization of red led from port f
-  SYSCTL_RCGCGPIO_R |= 0x20;
-  while ((SYSCTL_PRGPIO_R&0x20)==0){};
-  GPIO_PORTF_DIR_R |= 0x02;
-  GPIO_PORTF_DEN_R |= 0x02;
-
-}
-
-void uart2Init(void){ // the initialization of RX and TX pins in tiva to have the data from the module which will be in D6 and D7
-  SYSCTL_RCGCUART_R |= 0x04;
-  SYSCTL_RCGCGPIO_R |= 0x8;
-
-  UART2_CTL_R = 0;
-  UART2_IBRD_R = 520;
-  UART2_FBRD_R = 53;
-  UART2_CC_R = 0;
-  UART2_LCRH_R = 0x60;
-  UART2_CTL_R = 0x201;
-
-  GPIO_PORTD_DEN_R = 0xC0;
-  GPIO_PORTD_AFSEL_R = 0xC0;
-  GPIO_PORTD_AMSEL_R = 0;
-  GPIO_PORTD_PCTL_R = 0x11000000;
-  delay(10);
-}
-char uart2Rcv(void)  
+/*
+ * Function:  distance
+ * --------------------
+ * Computes the distance between two coordinates by using the following formula (Haversine):
+ *    Distance = (12742 * asin(0.5 - cos((c2[0]-c1[0])*p)/2 + cos(c1[0]*p) * cos(c2[0]*p) * (1-cos((c2[1]-c1[1])*p))/2)))*1000
+ *
+ *  c1: First coordinate.
+ *  c2: Second coordinate.
+ *
+ *  returns: The calculated distance between the two coordinates (in meters) rounded
+ */
+int distance(double c1[2], double c2[2])
 {
-  char data;
-  int tries = 0;
-  while ((UART2_FR_R & (1 << 4)) != 0){
-    if(tries>8000){
-      return '\0';
-    }
-    tries++;
-  } /* wait until Rx buffer is not full */
-  data = UART2_DR_R; /* before giving it another byte */
-  return (unsigned char) data;
+	float pi = 3.141592654;
+	float p = pi/180;
+	float a = 0.5 - cos((c2[0]-c1[0])*p)/2 + cos(c1[0]*p) * cos(c2[0]*p) * (1-cos((c2[1]-c1[1])*p))/2;
+	return (int)(round((12742 * asin(sqrt(a)))*1000));
 }
 
-void parseSentence(char *prefix ,char *data, char sen[75]){
-    int ctr = 0;
-    int i = 0;
-    int found = 0;
-    int j = 0;
-    while(data[i] != '\0'){
-        if(found){
-            while(j<75&&data[i]!= '\n'){
-                sen[j] = data[i];
-                i++;
-                j++;
-            }
-            while(j<75){
-                sen[j] = 0;
-                j++;
-            }
-            return;
-        }else{
-        if(data[i] == prefix[ctr]){
-            ctr++;
-            if(prefix[ctr] == '\0'){
-                found = 1;
-            }
-        }else{
-            ctr = 0;
-        }
-        }
-        i++;
-    }
+
+
+/*
+ * Function:  convertCoords
+ * --------------------
+ * Convert coordinates DDM format (String) to DD by:
+ *    1- Converts the DDM string to a double value.
+ *    2- Seperate the degrees part and the seconds part.
+ *    3- Converts the degrees and seconds into decimal degrees.
+ *
+ *  lat: Latitude.
+ *  lon: Longitude.
+ * 	ddCoord: The resultant DD coordinates.
+ *
+ *  returns: By reference, converted coordinates in DD.
+ */
+void convertCoords(char lat[10],char lon[10],double ddCoord[2])
+{
+	double degLat = 0;
+	double degLon = 0;
+	double secLat = 0;
+	double secLon = 0;
+
+	double latd = strtod(lat,NULL);
+	double lond = strtod(lon,NULL);
+
+	degLat = latd/100;
+	degLon = lond/100;
+	secLat = latd - ((int)degLat)*100;
+	secLon = lond - ((int)degLon)*100;
+
+	ddCoord[0] = (int)degLat+(secLat/60);
+	ddCoord[1] = (int)degLon+(secLon/60);
 }
 
-void getSpeed(char *sen,char speed[10]){
-    int i = 0;
-    int ctr = 0;
-    int j = 0;
-    while(sen[i] != '\0'){
-      if(sen[i] == ','){
-        ctr++;
-      }else if(ctr == 7&&j<10){
-              speed[j] = sen[i];
-              j++;
-          }
-      i++;
-    }
-    while(j<10){
-        speed[j] = 0;
-        j++;
-    }
+
+
+/*
+ * Function:  lcdData
+ * --------------------
+ * Sends data (character) to the LCD module in 4bit mode (nibble by nibble).
+ *
+ *  data: Data to send to the LCD.
+ *
+ *  returns: Nothing.
+ */
+void lcdData(char data)
+{
+	disableInt(); 					//Disable the interrupts, to avoid corruption of the sent data
+
+	GPIO_PORTA_DATA_R &=~(0x0C);	//Clear RS and EN
+	GPIO_PORTA_DATA_R |= (1<<2);	//RS HIGH
+	GPIO_PORTB_DATA_R =(data>>4);	//Write the upper nibble of the data
+	GPIO_PORTA_DATA_R |=(1<<3);		//EN HIGH
+
+	delayMicroseconds(200);
+	GPIO_PORTA_DATA_R &=~(0x0C); 	//Clear RS and EN
+	GPIO_PORTA_DATA_R |= (1<<2); 	//RS HIGH
+	GPIO_PORTB_DATA_R = data;  		//Write the lower nibbleof the data
+	GPIO_PORTA_DATA_R |=(1<<3); 	//EN HIGH
+
+	delayMicroseconds(200);
+	GPIO_PORTA_DATA_R &=~(0x0C); 	//Clear RS and EN
+	delayMicroseconds(400);
+
+	enableInt(); 					//Enable the interrupts
 }
-void getTime(char *sen,char time[6]){
-    int i = 0;
-    int ctr = 0;
-    int j = 0;
-    while(sen[i] != '\0'){
-      if(sen[i] == ','){
-        ctr++;
-      }else if(ctr == 5&&j<6){
-              time[j] = sen[i];
-              j++;
-          }
-      i++;
-    }
-    while(j<6){
-        time[j] = 0;
-        j++;
-    }
+
+
+
+/*
+ * Function:  lcdCmd
+ * --------------------
+ * Sends command (byte) to the LCD module in 4bit mode (nibble by nibble).
+ *
+ *  cmd: Command to send to the LCD.
+ *
+ *  returns: Nothing.
+ */
+void lcdCmd(char cmd)
+{
+	disableInt();					//Disable the interrupts, to avoid corruption of the sent data
+	GPIO_PORTA_DATA_R &=~(0x0C);	//Clear RS and EN
+	GPIO_PORTB_DATA_R =(cmd>>4);	//Send the upper nibble of the command
+	GPIO_PORTA_DATA_R |=(1<<3);		//EN HIGH
+
+	delay(1);
+	GPIO_PORTA_DATA_R &=~(0x0C);	//Clear RS and EN
+	GPIO_PORTB_DATA_R =(cmd);		//Send the lower nibble of the command
+	GPIO_PORTA_DATA_R |=(1<<3);		//EN HIGH
+
+	delay(1);
+	GPIO_PORTA_DATA_R &=~(0x0C);	//Clear RS and EN
+	delay(2);
+
+	enableInt(); 					//Enable the interrupts
+}
+
+
+
+/*
+ * Function:  lcdPrint
+ * --------------------
+ * Prints the given string on the LCD.
+ *
+ *  str: Pointer to the location of the string.
+ *  line: Determines the line position on the lCD. 0: Upper line, 1: Lower line. 
+ *
+ *  returns: Nothing.
+ */
+void lcdPrint(char *str , int line)
+{
+	if(!line){
+		lcdCmd(0x02); 		//Places the cursor on the upper line
+	}else{
+		lcdCmd(0xC0); 		//Places the cursor on the lower line
+	}
+	int i = 0;
+	while(str[i] != '\0'){	//Iterates over the string, till a null character appears
+		lcdData(str[i]); 	//Writes the character on the lcd
+		i++;
+	}
+}
+
+
+
+/*
+ * Function:  lcdInit
+ * --------------------
+ * Initializes the microcontroller and the LCD.
+ *
+ *
+ *  returns: Nothing.
+ */
+void lcdInit(void)
+{
+	/*
+		Initializing Ports B and A
+	*/
+	SYSCTL_RCGCGPIO_R |= 0x03; 				//Enable the clock for GPIO ports A and B (bits 0 and 1)
+	while ((SYSCTL_PRGPIO_R&0x03)==0){};	//Wait for GPIO clock to start
+	GPIO_PORTB_DIR_R |= 0x0F;				//Set the direction for PB0-3 as output
+	GPIO_PORTB_DEN_R |= 0x0F;				//Enables the digital I/O for PB0-3
+	GPIO_PORTA_DIR_R |= 0x0C;				//Set the direction for PA2,3 as output
+	GPIO_PORTA_DEN_R |= 0x0C;				//Enables the digital I/O for PA2,3
+
+
+	/*
+		Initializing the LCD
+	*/
+	GPIO_PORTA_DATA_R &=~(0x0C); 			//Clear RS and EN
+	GPIO_PORTB_DATA_R = 0x00; 				//Send the upper nibble for the 4bit mode command (0010)
+	GPIO_PORTA_DATA_R |=(1<<3); 			//EN HIGH
+	delay(5);
+	GPIO_PORTA_DATA_R &=~(0x0C); 			//Clear RS and EN
+
+	delay(20);
+	GPIO_PORTA_DATA_R &=~(0x0C); 			//Clear RS and EN
+	GPIO_PORTB_DATA_R = 0x2; 				//Send the lower nibble for the 4bit mode command (0010)
+	GPIO_PORTA_DATA_R |=(1<<3); 			//EN HIGH
+	delay(5);
+	GPIO_PORTA_DATA_R &=~(0x0C); 			//Clear RS and EN
+
+	lcdCmd(0x28);							//2 line, 5*7 matrix in 4-bit mode
+	lcdClear();
+	lcdHome();
+	lcdOn();
+}
+
+
+
+/*
+ * Function:  swInit
+ * --------------------
+ * Initializes the microcontroller for the switches 1 and 2 (PF0,4).
+ *
+ *
+ *  returns: Nothing.
+ */
+void swInit(void)
+{
+	SYSCTL_RCGCGPIO_R |= 0x20;				//Enable the clock for GPIO port F (bits 5)
+	while ((SYSCTL_PRGPIO_R&0x20)==0){};	//Wait for GPIO clock to start
+	GPIO_PORTF_LOCK_R = 0x4C4F434B;			//Unlock PF
+	GPIO_PORTF_CR_R |=0x11;					//Allow changes to PF
+	GPIO_PORTF_DIR_R &= ~0x11;				//Set the direction for PF0,4 as input
+	GPIO_PORTF_DEN_R |= 0x11;				//Enables the digital I/O for PF0,4
+	GPIO_PORTF_PUR_R |= 0x11;				//Enbale enable internal pull up for PF0,4
+}
+
+
+
+/*
+ * Function:  redLedInit
+ * --------------------
+ * Initializes the microcontroller for the red LED PF1.
+ *
+ *
+ *  returns: Nothing.
+ */
+void redLedInit(void)
+{
+	SYSCTL_RCGCGPIO_R |= 0x20;					//Enable the clock for GPIO port F (bit 5)
+	while ((SYSCTL_PRGPIO_R&0x20)==0){};		//Wait for GPIO clock to start
+	GPIO_PORTF_DIR_R |= 0x02;					//Set the direction for PF1 as output
+	GPIO_PORTF_DEN_R |= 0x02;					//Enables the digital I/O for PF1
+}
+
+
+
+/*
+ * Function:  uart2Init
+ * --------------------
+ * Initializes the microcontroller UART module 2.
+ *
+ *
+ *  returns: Nothing.
+ */
+void uart2Init(void)
+{
+	SYSCTL_RCGCUART_R |= 0x04;			//Enable clock for UART2
+	SYSCTL_RCGCGPIO_R |= 0x8;			//Enable the clock for GPIO port D
+
+	UART2_CTL_R = 0;
+										//Set the UART Baud-rate. BRD (Baud-rate devisor) = Clk / (16*Baud_rate), For 9600, BRD = 80M / (16*9600) = 520.833333
+	UART2_IBRD_R = 520;					//UART Baud-rate integer devisor. IBRD = integer(BRD) = 520
+	UART2_FBRD_R = 53;					//UART Baud-rate fractional devisor. FBRD = integer(fraction_part *64 +0.5) = integer(0.833333 *64 +0.5) = 53
+	UART2_CC_R = 0; 					//Set the UART clock source to be as the system clock (80Mhz)
+	UART2_LCRH_R = 0x60;				//Sets the word length to be 8bits and disables the parity
+	UART2_CTL_R = 0x201;				//Enable UART2 and enable recieving
+
+	GPIO_PORTD_DEN_R = 0xC0;			//Enable the digital I/O for PD6,7
+	GPIO_PORTD_AFSEL_R = 0xC0;			//Enable the alternate function of PD6,7
+	GPIO_PORTD_AMSEL_R = 0;				//Disable the analog mode for PD6,7
+	GPIO_PORTD_PCTL_R = 0x11000000;		//Select the UART peripheral function for PD6,7
+	delay(10);
+}
+
+
+
+/*
+ * Function:  uart2Rcv
+ * --------------------
+ * Recieves a character from UART2.
+ *
+ *
+ *  returns: The recieved character or null ('\0')if no characters available after 8000 tries.
+ */
+char uart2Rcv(void)
+{
+	int tries = 0;
+	while ((UART2_FR_R & (1 << 4)) != 0){	//Wait for the Rx FIFO to be full
+		if(tries>8000){						//Count the tries till 8000
+			return '\0';					//If no characters recieved return null. Used to not keep the proccessor waiting for characters.
+		}
+		tries++;
+	} 
+	return (unsigned char) UART2_DR_R;		//Return the character recieved in the data register
+}
+
+
+
+/*
+ * Function:  parseSentence
+ * --------------------
+ * Parses(searches for) a NMEA sentence from the GPS data.
+ *
+ *  prefix: Pointer to the location of the sentece prefix string.
+ *  data: Pointer to the location of the GPS data string.
+ *  sen: The parsed sentence.
+ *
+ *  returns: By referrence the parsed sentence.
+ */
+void parseSentence(char *prefix ,char *data, char sen[75])
+{
+	int ctr = 0;							//Prefix iterator
+	int i = 0;								//Data iterator
+	int found = 0;							//Prefix found flag
+	int j = 0;								//Output sentence iterator
+	while(data[i] != '\0'){ 				//Iterate over the characters in the GPS data string till a null ('\0') character (end of the string)
+		if(found){							//Check if the prefix is found. If found, fill the sentence (sen) with the data till the newline character ('\n')
+			while(j<75&&data[i]!= '\n'){
+				sen[j] = data[i];
+				i++;
+				j++;
+			}
+			while(j<75){					//Fill the rest of the sentence with null ('\0')
+				sen[j] = 0;
+				j++;
+			}
+			return;
+		}else{								//If not found, keep searching.
+			if(data[i] == prefix[ctr]){		//If the current data character equals the next prefix character
+				ctr++;
+				if(prefix[ctr] == '\0'){	//Keep looking until the end of the prefix
+					found = 1;
+				}
+			}else{							//If the characters mismatch, reset the prefix iterator (ctr)
+				ctr = 0;
+			}
+		}
+		i++;
+	}
+}
+
+
+
+/*
+ * Function:  getSpeed
+ * --------------------
+ * Gets the ground speed data from the GPS NMEA sentence "GPVTG". Sentence example:
+ *  $GPVTG,172.21,T,,M,1.736,N,3.216,K,A*3F
+ * 	The speed required to be extracted is "3.216", which is always located between the 7th and the 8th commas.
+ *
+ *  sen: Pointer to the location of the sentece string.
+ *  speed: The speed value string.
+ *
+ *  returns: By referrence the speed value as a string.
+ */
+void getSpeed(char *sen,char speed[10])
+{
+	int i = 0;						//Sentence iterator
+	int ctr = 0;					//Commas counter
+	int j = 0;						//Speed data string iterator
+	while(sen[i] != '\0'){			//Iterate over characters of the GPS sentence string
+		if(sen[i] == ','){			//If the character is a comma ',' increment the comma counter (ctr)
+			ctr++;
+		}else if(ctr == 7&&j<10){	//If the character is not a comma and the number of previous commas is 7, parse the speed data.
+			speed[j] = sen[i];
+			j++;
+		}
+		i++;
+	}
+	while(j<10){					//Fill the rest of the speed string with null characters
+		speed[j] = 0;
+		j++;
+	}
+}
+
+
+
+/*
+ * Function:  getTime
+ * --------------------
+ * Gets the time data from the GPS NMEA sentence "GPGLL". Sentence example:
+ *  $GPGLL,4711.48920,N,05250.23190,W,161858.00,A,A*77
+ * 	The time required to be extracted is "161858.00", which is always located between the 5th and the 7th commas.
+ *
+ *  sen: Pointer to the location of the sentece string.
+ *  time: The time value string.
+ *
+ *  returns: By referrence the time value as a string.
+ */
+void getTime(char *sen,char time[6])
+{
+	int i = 0;						//Sentence iterator
+	int ctr = 0;					//Commas counter
+	int j = 0;						//Time data string iterator
+	while(sen[i] != '\0'){			//Iterate over characters of the GPS sentence string
+		if(sen[i] == ','){			//If the character is a comma ',' increment the comma counter (ctr)
+			ctr++;
+		}else if(ctr == 5&&j<6){	//If the character is not a comma and the number of previous commas is 5, parse the time data.
+			time[j] = sen[i];
+			j++;
+		}
+		i++;
+	}
+	while(j<6){						//Fill the rest of the speed string with null characters
+		time[j] = 0;
+		j++;
+	}
 }
 
 
@@ -316,7 +516,7 @@ void distanceMode(int printEn){
 
     if(printEn){
       char dist[15]={0};
-      itoa(dist_sum,dist,10);
+      itoa(distSum,dist,10);
       lcdClearLine(0);
       lcdPrint(distStr,0);
       lcdClearLine(1);
@@ -325,7 +525,7 @@ void distanceMode(int printEn){
     }
     double new_coord[2]={0};
     char sen[75]={0};
-    parseSentence("GPGLL",c,sen);
+    parseSentence("GPGLL",gpsData,sen);
       if(sen[1] == ','||sen[1] == '\0'){
         if(printEn){
         lcdClearLine(0);
@@ -344,27 +544,27 @@ void distanceMode(int printEn){
         }
     }
         //Calculate the average location to minimize errors
-        if((last_coord[0]+last_coord[1])==0){
-        convertCoords(lat,lon,last_coord);
+        if((lastCoord[0]+lastCoord[1])==0){
+        convertCoords(lat,lon,lastCoord);
         }else{
             convertCoords(lat,lon,new_coord);
-            if(set_flg){
-            new_coord[0] = lat_avg;
-            new_coord[1] = lon_avg;
-            dist_sum += distance(last_coord,new_coord);
-            last_coord[0] = new_coord[0];
-            last_coord[1] = new_coord[1];
-            set_flg =0;
-            lat_avg =0;
-            lon_avg =0;
+            if(setFlg){
+            new_coord[0] = latAvg;
+            new_coord[1] = lonAvg;
+            distSum += distance(lastCoord,new_coord);
+            lastCoord[0] = new_coord[0];
+            lastCoord[1] = new_coord[1];
+            setFlg =0;
+            latAvg =0;
+            lonAvg =0;
             }else{
-                if(set_ctr == set_size){
-                set_flg =1;
-                set_ctr =0;
+                if(setCtr == setSize){
+                setFlg =1;
+                setCtr =0;
                 }else{
-                lat_avg += new_coord[0]/set_size;
-                lon_avg += new_coord[1]/set_size;
-                set_ctr++;
+                latAvg += new_coord[0]/setSize;
+                lonAvg += new_coord[1]/setSize;
+                setCtr++;
                 }
                 }
 
@@ -374,11 +574,11 @@ void altFunc(){
   disableInt();
        switch(mode){
         case 0:
-          dist_sum = 0 ;
+          distSum = 0 ;
         break;
         case 1:
-          origin_coord[0] = current_coord[0];
-          origin_coord[1] = current_coord[1];
+          originCoord[0] = currentCoord[0];
+          originCoord[1] = currentCoord[1];
         break;
         case 2:
         break;
@@ -397,7 +597,7 @@ void altFunc(){
 void displacementMode(){
   int disp = 0;
     char sen[75]={0};
-    parseSentence("GPGLL",c,sen);
+    parseSentence("GPGLL",gpsData,sen);
       if(sen[1] == ','||sen[1] == '\0'){
         lcdClearLine(0);
         lcdPrint(dispNoSig,0);
@@ -413,9 +613,9 @@ void displacementMode(){
             lon[i] = sen[i+14];
         }
     }
-      convertCoords(lat,lon,current_coord);
-      if((origin_coord[0]+origin_coord[1])!=0){
-        disp = distance(origin_coord,current_coord);
+      convertCoords(lat,lon,currentCoord);
+      if((originCoord[0]+originCoord[1])!=0){
+        disp = distance(originCoord,currentCoord);
       }
     char disps[15]={0};
     itoa(disp,disps,10);
@@ -433,7 +633,7 @@ void coordsMode(){
   char sen[75]={0};
   char lat[13]={0};
   char lon[13]={0};
-  parseSentence("GPGLL",c,sen);
+  parseSentence("GPGLL",gpsData,sen);
   if(sen[1] == ','||sen[1] == '\0'){
   lcdClearLine(0);
   lcdPrint(coordStr,0);
@@ -462,7 +662,7 @@ void coordsMode(){
 void speedMode(){
   if(mode != 3){switchMode();return;}
   char sen[75]={0};
-  parseSentence("GPVTG",c,sen);
+  parseSentence("GPVTG",gpsData,sen);
   char val[10]= {0};
   getSpeed(sen,val);
   if(val[0]=='\0'){
@@ -486,7 +686,7 @@ void speedMode(){
 void timeMode(){
   if(mode != 4){switchMode();return;}
   char sen[75]={0};
-  parseSentence("GPGLL",c,sen);
+  parseSentence("GPGLL",gpsData,sen);
   char val[6]= {0};
   getTime(sen,val);
   if(val[0]=='\0'){
@@ -561,12 +761,12 @@ void loop(){
       // memset(c, 0, sizeof c);
     int i=0;
     while((tmp!='\0')&&i<512&&!dataReady){
-        c[i] = tmp; 
+        gpsData[i] = tmp; 
         tmp = uart2Rcv();
         i++;
         }
     while(i<512){
-      c[i] = 0;
+      gpsData[i] = 0;
       i++;
     }
         dataReady = 1;
@@ -597,3 +797,4 @@ void loop(){
         }
     }
   }
+
