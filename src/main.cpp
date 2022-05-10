@@ -37,6 +37,7 @@ void switchMode(void);
 void nextMode(void);
 void altFunc(void);
 void distanceMode(int printEn);
+void displacementMode(void);
 void disableInt();
 void enableInt();
 
@@ -563,6 +564,12 @@ void altFunc(void)
 	switch(mode){
 		case 0:
 			distSum = 0; 						//Reset the distance
+			lastCoord[0] = 0;
+			lastCoord[1] = 0;
+			latAvg = 0;
+			lonAvg = 0;
+			setFlg = 0;
+			setCtr = 0;
 			break;
 		case 1:
 			originCoord[0] = currentCoord[0];	//Set the origin latitude in the displacement mode
@@ -659,39 +666,56 @@ void distanceMode(int printEn)
 	}
 }
 
-void displacementMode(){
-	if(mode != 1){switchMode();return;}
-  int disp = 0;
-    char sen[75]={0};
-    parseSentence("GPGLL",gpsData,sen);
-      if(sen[1] == ','||sen[1] == '\0'){
-        lcdClearLine(0);
-        lcdPrint(dispNoSig,0);
-      return;
-      }
-    char lat[11]={0};
-    char lon[12]={0};
-    for(int i=0;i<11;i++){
-        if(i==10){
-            lon[i] = sen[i+14];
-        }else{
-            lat[i] = sen[i+1];
-            lon[i] = sen[i+14];
-        }
-    }
-      convertCoords(lat,lon,currentCoord);
-      if((originCoord[0]+originCoord[1])!=0){
-        disp = distance(originCoord,currentCoord);
-      }
-    char disps[15]={0};
-    itoa(disp,disps,10);
-    lcdClearLine(0);
-    lcdPrint(dispStr,0);
-    lcdClearLine(1);
-    lcdPrint(disps,1);
-    lcdData('m');
-    distanceMode(0);
 
+
+/*
+ * Function:  displacementMode
+ * --------------------
+ * Calculates the displacement covered by:
+ *  1- Fethcing the current coordinates from the GPS module
+ *  2- Calculate the distance between the origin coordinates and the current coordinates
+ *  3- Print the displacement
+ *
+ * 
+ *  returns: Nothing
+ */
+void displacementMode(void)
+{
+	if(mode != 1){switchMode();return;}
+
+	int disp = 0;
+	char sen[75]={0};
+	parseSentence("GPGLL",gpsData,sen);
+	if(sen[1] == ','||sen[1] == '\0'){
+		lcdClearLine(0);
+		lcdPrint(dispNoSig,0);
+		return;
+	}
+
+	char lat[11]={0};
+	char lon[12]={0};
+	for(int i=0;i<11;i++){
+		if(i==10){
+			lon[i] = sen[i+14];
+		}else{
+			lat[i] = sen[i+1];
+			lon[i] = sen[i+14];
+		}
+	}
+
+	convertCoords(lat,lon,currentCoord);
+	if((originCoord[0]+originCoord[1])!=0){
+		disp = distance(originCoord,currentCoord);
+	}
+
+	char disps[15]={0};
+	itoa(disp,disps,10);
+	lcdClearLine(0);
+	lcdPrint(dispStr,0);
+	lcdClearLine(1);
+	lcdPrint(disps,1);
+	lcdData('m');
+	distanceMode(0);
 }
 
 void coordsMode(){
@@ -822,13 +846,13 @@ void loop(){
     // unsigned char sw2 = !((GPIO_PORTF_DATA_R & 0x01)>>0);
     // unsigned char sw1 = !((GPIO_PORTF_DATA_R & 0x10)>>4);
 
-    char tmp = uart2Rcv();
-    if(tmp != '\0'){
+    char buf = uart2Rcv();
+    if(buf != '\0'){
       // memset(c, 0, sizeof c);
     int i=0;
-    while((tmp!='\0')&&i<512&&!dataReady){
-        gpsData[i] = tmp; 
-        tmp = uart2Rcv();
+    while((buf!='\0')&&i<512&&!dataReady){
+        gpsData[i] = buf; 
+        buf = uart2Rcv();
         i++;
         }
     while(i<512){
