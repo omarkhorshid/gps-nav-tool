@@ -33,6 +33,10 @@ char uart2Rcv(void);
 void parseSentence(char *prefix ,char *data, char sen[75]);
 void getSpeed(char *sen,char speed[10]);
 void getTime(char *sen,char time[6]);
+void switchMode(void);
+void nextMode(void);
+void altFunc(void);
+void distanceMode(int printEn);
 void disableInt();
 void enableInt();
 
@@ -465,136 +469,198 @@ void getTime(char *sen,char time[6])
 }
 
 
-void switchMode(){
-      switch(mode){
-        case 0:
-            lcdClearLine(0);
-            lcdPrint(distStr,0);
-            lcdClearLine(1);
-        break;
-        case 1:
-            lcdClearLine(0);
-            lcdPrint(dispStr,0);
-            lcdClearLine(1);
-        break;
-        case 2:
-            lcdClearLine(0);
-            lcdPrint(coordStr,0);
-            lcdClearLine(1);
-            delay(500);
-        break;
-        case 3:
-            lcdClearLine(0);
-            lcdPrint(speedStr,0);
-            lcdClearLine(1);
-        break;
-        case 4:
-            lcdClearLine(0);
-            lcdPrint(timeStr,0);
-            lcdClearLine(1);
-        break;
-        default:
-        mode = 0;
-        break;
-        }
+
+/*
+ * Function:  switchMode
+ * --------------------
+ * Switches between the different mode titles on the LCD.
+ * Modes:
+ *  0- Distance
+ *  1- Displacement
+ *  2- Coordinates
+ *  3- Speed
+ *  4- Time
+ *
+ *
+ *  returns: Nothing
+ */
+void switchMode(void)
+{
+	switch(mode){
+		case 0:
+			lcdClearLine(0);
+			lcdPrint(distStr,0);
+			lcdClearLine(1);
+			break;
+		case 1:
+			lcdClearLine(0);
+			lcdPrint(dispStr,0);
+			lcdClearLine(1);
+			break;
+		case 2:
+			lcdClearLine(0);
+			lcdPrint(coordStr,0);
+			lcdClearLine(1);
+			delay(500);
+			break;
+		case 3:
+			lcdClearLine(0);
+			lcdPrint(speedStr,0);
+			lcdClearLine(1);
+			break;
+		case 4:
+			lcdClearLine(0);
+			lcdPrint(timeStr,0);
+			lcdClearLine(1);
+			break;
+		default:
+			mode = 0;
+			break;
+	}
 }
 
-void nextMode(){
-  disableInt();
-    if(mode<4){
-        mode++;
-    }else{
-        mode =0;
-    }
-    switchMode();
-    delay(500);
-   enableInt();
+
+
+/*
+ * Function:  nextMode
+ * --------------------
+ * Cycles between the different modes by incrementing the mode global variable.
+ * This is the interrupt subroutine for SW1 (PF4)
+ *
+ *
+ *  returns: Nothing
+ */
+void nextMode(void)
+{
+	disableInt();	//Disable the interrupts
+
+	if(mode<4){		//Cycle between the modes
+		mode++;
+	}else{
+		mode = 0;
+	}
+	switchMode();	//Print the mode title on the LCD
+
+	delay(500);
+	enableInt();	//Enable the interrupts
 }
 
-void distanceMode(int printEn){
-  if((mode != 0)&&printEn){switchMode();return;}
 
-    if(printEn){
-      char dist[15]={0};
-      itoa(distSum,dist,10);
-      lcdClearLine(0);
-      lcdPrint(distStr,0);
-      lcdClearLine(1);
-      lcdPrint(dist,1);
-      lcdData('m');
-    }
-    double new_coord[2]={0};
-    char sen[75]={0};
-    parseSentence("GPGLL",gpsData,sen);
-      if(sen[1] == ','||sen[1] == '\0'){
-        if(printEn){
-        lcdClearLine(0);
-        lcdPrint(distNoSig,0);
-        }
-      return;
-      }
-    char lat[11]={0};
-    char lon[12]={0};
-    for(int i=0;i<11;i++){
-        if(i==10){
-            lon[i] = sen[i+14];
-        }else{
-            lat[i] = sen[i+1];
-            lon[i] = sen[i+14];
-        }
-    }
-        //Calculate the average location to minimize errors
-        if((lastCoord[0]+lastCoord[1])==0){
-        convertCoords(lat,lon,lastCoord);
-        }else{
-            convertCoords(lat,lon,new_coord);
-            if(setFlg){
-            new_coord[0] = latAvg;
-            new_coord[1] = lonAvg;
-            distSum += distance(lastCoord,new_coord);
-            lastCoord[0] = new_coord[0];
-            lastCoord[1] = new_coord[1];
-            setFlg =0;
-            latAvg =0;
-            lonAvg =0;
-            }else{
-                if(setCtr == setSize){
-                setFlg =1;
-                setCtr =0;
-                }else{
-                latAvg += new_coord[0]/setSize;
-                lonAvg += new_coord[1]/setSize;
-                setCtr++;
-                }
-                }
 
-            }
+/*
+ * Function:  altFunc
+ * --------------------
+ * Performs the corresponding function in the different modes.
+ * This is the interrupt subroutine for SW2 (PF0)
+ *
+ *
+ *  returns: Nothing
+ */
+void altFunc(void)
+{
+	disableInt();
+
+	switch(mode){
+		case 0:
+			distSum = 0; 						//Reset the distance
+			break;
+		case 1:
+			originCoord[0] = currentCoord[0];	//Set the origin latitude in the displacement mode
+			originCoord[1] = currentCoord[1];	//Set the origin longitude in the displacement mode
+			break;
+		case 2:
+			break;
+		case 3:
+			break;
+		case 4:
+			break;
+		default:
+			mode = 0;
+			break;
+	}
+
+	delay(200);
+	enableInt();
 }
-void altFunc(){
-  disableInt();
-       switch(mode){
-        case 0:
-          distSum = 0 ;
-        break;
-        case 1:
-          originCoord[0] = currentCoord[0];
-          originCoord[1] = currentCoord[1];
-        break;
-        case 2:
-        break;
-        case 3:
-        break;
-        case 4:
-        break;
-        default:
-        mode = 0;
-        break;
-        }
-  delay(200);
-  enableInt();
+
+
+
+/*
+ * Function:  distanceMode
+ * --------------------
+ * Calculates the cumulative distance by:
+ *  1- Fethcing the current coordinates from the GPS module
+ *  2- Calculating a moving average of the coordinates to minimize the error
+ *  3- Add the distance between the average coordinates and the last known average to the cumulative distance
+ *  4- Print the total cumulative distance
+ *
+ *  printEn: Enables the printing to the LCD. The printing is disabled to calculate the cumulative distance while in other modes
+ * 
+ *  returns: Nothing
+ */
+void distanceMode(int printEn)
+{
+	if((mode != 0)&&printEn){switchMode();return;}		//Make sure that we are in the correct mode
+
+	if(printEn){ 										//Check the LCD printing flag. If true, display the distance on the LCD
+		char dist[15]={0};								//Distance string
+		itoa(distSum,dist,10);							//Convert the total distance (distSum) to a string
+		lcdClearLine(0);
+		lcdPrint(distStr,0);							//Print the distance title
+		lcdClearLine(1);
+		lcdPrint(dist,1);								//Print the distance value
+		lcdData('m');
+	}
+	double newCoord[2]={0};								//The newly fethced coordinates
+	char sen[75]={0};
+	parseSentence("GPGLL",gpsData,sen);					//Parse the GPGLL sentence
+	if(sen[1] == ','||sen[1] == '\0'){					//Check if the GPS data is not available. If so, show the no signal indicator and exit the function. 
+		if(printEn){
+			lcdClearLine(0);
+			lcdPrint(distNoSig,0);
+		}
+		return;
+	}
+
+	char lat[11]={0};									//Latitude string
+	char lon[12]={0};									//Longitude string
+	for(int i=0;i<11;i++){								//Extract the longitude and latitude from the sentence
+		if(i==10){
+			lon[i] = sen[i+14];
+		}else{
+			lat[i] = sen[i+1];
+			lon[i] = sen[i+14];
+		}
+	}
+	
+	if((lastCoord[0]+lastCoord[1])==0){					//Check if the last known coordinate is empty, fill it with the current coordinates
+		convertCoords(lat,lon,lastCoord);
+	}else{												//Else, compute the average of the coordinates set and when the average is available compute the distance
+		convertCoords(lat,lon,newCoord);
+		if(setFlg){										//Check if the average is available, calculate the distance
+			newCoord[0] = latAvg;
+			newCoord[1] = lonAvg;
+			distSum += distance(lastCoord,newCoord);
+			lastCoord[0] = newCoord[0];
+			lastCoord[1] = newCoord[1];
+			setFlg =0;
+			latAvg =0;
+			lonAvg =0;
+		}else{											//Else, calculate the average
+			if(setCtr == setSize){
+				setFlg =1;
+				setCtr =0;
+			}else{
+				latAvg += newCoord[0]/setSize;
+				lonAvg += newCoord[1]/setSize;
+				setCtr++;
+			}
+		}
+	}
 }
 
 void displacementMode(){
+	if(mode != 1){switchMode();return;}
   int disp = 0;
     char sen[75]={0};
     parseSentence("GPGLL",gpsData,sen);
