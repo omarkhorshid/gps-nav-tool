@@ -38,6 +38,8 @@ void nextMode(void);
 void altFunc(void);
 void distanceMode(int printEn);
 void displacementMode(void);
+void coordsMode(void);
+void speedMode(void);
 void disableInt();
 void enableInt();
 
@@ -692,9 +694,9 @@ void displacementMode(void)
 		return;
 	}
 
-	char lat[11]={0};
-	char lon[12]={0};
-	for(int i=0;i<11;i++){
+	char lat[11]={0};								//Latitude string
+	char lon[12]={0};								//Longitude string
+	for(int i=0;i<11;i++){							//Extract the longitude and latitude from the sentence
 		if(i==10){
 			lon[i] = sen[i+14];
 		}else{
@@ -717,57 +719,86 @@ void displacementMode(void)
 	lcdData('m');
 }
 
-void coordsMode(){
-  if(mode != 2){switchMode();return;}
-  char sen[75]={0};
-  char lat[13]={0};
-  char lon[13]={0};
-  parseSentence("GPGLL",gpsData,sen);
-  if(sen[1] == ','||sen[1] == '\0'){
-  lcdClearLine(0);
-  lcdPrint(coordStr,0);
-   lcdClearLine(1);
-  lcdPrint(noGps,1);
-  return;
-  }
-  for(int i=0;i<12;i++){
-    if(i==11){
-    lon[i] = sen[i+14+1];
-    }else if(i==10){
-      lat[i] = sen[i+1+1];
-      lon[i] = sen[i+14];
-    }else{
-    lat[i] = sen[i+1];
-    lon[i] = sen[i+14];
-    }
-  }
-    lcdClearLine(0);
-  lcdPrint((char *)lat,0);
-      lcdClearLine(1);
-  lcdPrint((char *)lon,1);
+
+
+/*
+ * Function:  coordsMode
+ * --------------------
+ * Displays the current coordinates fetched from the GPS module:
+ *  1- Fethcing the current coordinates from the GPS module
+ *  2- Print the coordinates on the LCD
+ *
+ * 
+ *  returns: Nothing
+ */
+void coordsMode(void)
+{
+	if(mode != 2){switchMode();return;}
+
+	char sen[75]={0};
+	char lat[13]={0};
+	char lon[13]={0};
+	parseSentence("GPGLL",gpsData,sen);
+	if(sen[1] == ','||sen[1] == '\0'){
+		lcdClearLine(0);
+		lcdPrint(coordStr,0);
+		lcdClearLine(1);
+		lcdPrint(noGps,1);
+		return;
+	}
+	for(int i=0;i<12;i++){
+		if(i==11){
+			lon[i] = sen[i+14+1];
+		}else if(i==10){
+			lat[i] = sen[i+1+1];
+			lon[i] = sen[i+14];
+		}else{
+			lat[i] = sen[i+1];
+			lon[i] = sen[i+14];
+		}
+	}
+	lcdClearLine(0);
+	lcdPrint((char *)lat,0);
+	lcdClearLine(1);
+	lcdPrint((char *)lon,1);
 }
 
-void speedMode(){
-  if(mode != 3){switchMode();return;}
-  char sen[75]={0};
-  parseSentence("GPVTG",gpsData,sen);
-  char val[10]= {0};
-  getSpeed(sen,val);
-  if(val[0]=='\0'){
-       lcdClearLine(0);
-  lcdPrint(speedNoSig,0);
-  return;
-  }
-  lcdClearLine(0);
-  lcdPrint(speedStr,0);
-  lcdClearLine(1);
-  lcdPrint((char *)val,1);
-  char unit[] = "Km/h";
-  int i=0;
-  while(unit[i]!='\0'&&i<1024){
-    lcdData(unit[i]);
-    i++;
-  }
+
+
+/*
+ * Function:  speedMode
+ * --------------------
+ * Displays the ground speed fetched from the GPS module:
+ *  1- Fethcing the ground speed data from the GPS module
+ *  2- Print the speed on the LCD
+ *
+ * 
+ *  returns: Nothing
+ */
+void speedMode(void)
+{
+	if(mode != 3){switchMode();return;}
+
+	char sen[75]={0};
+	parseSentence("GPVTG",gpsData,sen);
+	char val[10]= {0};
+	getSpeed(sen,val);
+	if(val[0]=='\0'){
+		lcdClearLine(0);
+		lcdPrint(speedNoSig,0);
+		return;
+	}
+	lcdClearLine(0);
+	lcdPrint(speedStr,0);
+	lcdClearLine(1);
+	lcdPrint((char *)val,1);
+	char unit[] = "Km/h";
+
+	int i=0;
+	while(unit[i]!='\0'&&i<1024){
+		lcdData(unit[i]);
+		i++;
+	}
 }
 
 void timeMode(){
