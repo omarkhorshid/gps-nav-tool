@@ -733,12 +733,12 @@ void displacementMode(void)
  */
 void coordsMode(void)
 {
-	if(mode != 2){switchMode();return;}
+	if(mode != 2){switchMode();return;}		//Make sure that we are in the correct mode
 
 	char sen[75]={0};
 	char lat[13]={0};
 	char lon[13]={0};
-	parseSentence("GPGLL",gpsData,sen);
+	parseSentence("GPGLL",gpsData,sen);		//Parse the GPGLL sentence
 	if(sen[1] == ','||sen[1] == '\0'){
 		lcdClearLine(0);
 		lcdPrint(coordStr,0);
@@ -746,7 +746,7 @@ void coordsMode(void)
 		lcdPrint(noGps,1);
 		return;
 	}
-	for(int i=0;i<12;i++){
+	for(int i=0;i<12;i++){				//Extract the longitude and latitude from the sentence
 		if(i==11){
 			lon[i] = sen[i+14+1];
 		}else if(i==10){
@@ -758,7 +758,7 @@ void coordsMode(void)
 		}
 	}
 	lcdClearLine(0);
-	lcdPrint((char *)lat,0);
+	lcdPrint((char *)lat,0);			//Print the latitude and longitude on the LCD
 	lcdClearLine(1);
 	lcdPrint((char *)lon,1);
 }
@@ -777,13 +777,13 @@ void coordsMode(void)
  */
 void speedMode(void)
 {
-	if(mode != 3){switchMode();return;}
+	if(mode != 3){switchMode();return;}//Make sure that we are in the correct mode
 
 	char sen[75]={0};
-	parseSentence("GPVTG",gpsData,sen);
+	parseSentence("GPVTG",gpsData,sen);//Parse the GPVTG sentence
 	char val[10]= {0};
 	getSpeed(sen,val);
-	if(val[0]=='\0'){
+	if(val[0]=='\0'){//Check if speed data is available, if not print no signal mode title on the LCD
 		lcdClearLine(0);
 		lcdPrint(speedNoSig,0);
 		return;
