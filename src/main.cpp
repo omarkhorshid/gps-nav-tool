@@ -681,11 +681,11 @@ void distanceMode(int printEn)
  */
 void displacementMode(void)
 {
-	if(mode != 1){switchMode();return;}
+	if(mode != 1){switchMode();return;}				//Make sure that we are in the correct mode
 
 	int disp = 0;
 	char sen[75]={0};
-	parseSentence("GPGLL",gpsData,sen);
+	parseSentence("GPGLL",gpsData,sen);				//Parse the GPGLL sentence
 	if(sen[1] == ','||sen[1] == '\0'){
 		lcdClearLine(0);
 		lcdPrint(dispNoSig,0);
@@ -704,18 +704,17 @@ void displacementMode(void)
 	}
 
 	convertCoords(lat,lon,currentCoord);
-	if((originCoord[0]+originCoord[1])!=0){
+	if((originCoord[0]+originCoord[1])!=0){			//Check if origin exists, if so calculate the displacement
 		disp = distance(originCoord,currentCoord);
 	}
 
 	char disps[15]={0};
-	itoa(disp,disps,10);
+	itoa(disp,disps,10);							//Convert distance integer to string
 	lcdClearLine(0);
 	lcdPrint(dispStr,0);
 	lcdClearLine(1);
 	lcdPrint(disps,1);
 	lcdData('m');
-	distanceMode(0);
 }
 
 void coordsMode(){
@@ -746,7 +745,6 @@ void coordsMode(){
   lcdPrint((char *)lat,0);
       lcdClearLine(1);
   lcdPrint((char *)lon,1);
-  distanceMode(0);
 }
 
 void speedMode(){
@@ -770,7 +768,6 @@ void speedMode(){
     lcdData(unit[i]);
     i++;
   }
-  distanceMode(0);
 }
 
 void timeMode(){
@@ -803,7 +800,6 @@ void timeMode(){
     lcdData(unit[i]);
     i++;
   }
-  distanceMode(0);
 }
 
 void disableInt(){
@@ -885,6 +881,7 @@ void loop(){
         mode = 0;
         break;
         }
+		distanceMode(0);
     }
   }
 
