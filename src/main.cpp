@@ -48,18 +48,18 @@ void enableInt();
 /*
 *   Global variables
 */
-char gpsData[512];				//Holds the fetched GPS UART data
-bool dataReady = 0;				//Flag, indicates that new GPS data have been fetched. 1: New data available, 0: No new data
-int distSum = 0;				//Holds the total distance covered
+char gpsData[512];			//Holds the fetched GPS UART data
+bool dataReady = 0;			//Flag, indicates that new GPS data have been fetched. 1: New data available, 0: No new data
+int distSum = 0;			//Holds the total distance covered
 double lastCoord[2] = {0};		//Holds the last known coordinates
-double latAvg = 0;				//Holds the average latitude
-double lonAvg = 0;				//Holds the average longitude
-int setFlg = 0;					//Indicates that the averaging set is ready
-int setCtr = 0;					//Averaging counter
-int setSize = 3;				//Averaging set size, sets the number of points to take average of
+double latAvg = 0;			//Holds the average latitude
+double lonAvg = 0;			//Holds the average longitude
+int setFlg = 0;				//Indicates that the averaging set is ready
+int setCtr = 0;				//Averaging counter
+int setSize = 3;			//Averaging set size, sets the number of points to take average of
 unsigned int mode = 0;			//Holds the mode index. 0: Distance, 1: Displacement, 2: Coords, 3: Speed, 4: Atomic Clock
-double currentCoord[2] = {0};	//Holds the current coordinates
-double originCoord[2] = {0};	//Holds the origin coordinates, used by displacement mode
+double currentCoord[2] = {0};		//Holds the current coordinates
+double originCoord[2] = {0};		//Holds the origin coordinates, used by displacement mode
 
 
 
