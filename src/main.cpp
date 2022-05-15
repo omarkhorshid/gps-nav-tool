@@ -779,7 +779,7 @@ void speedMode(void)
 {
 	if(mode != 3){switchMode();return;}//Make sure that we are in the correct mode
 
-	char sen[75]={0};
+	char sen[75]={0};//
 	parseSentence("GPVTG",gpsData,sen);//Parse the GPVTG sentence
 	char val[10]= {0};
 	getSpeed(sen,val);
