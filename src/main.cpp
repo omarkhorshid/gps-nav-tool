@@ -40,6 +40,7 @@ void distanceMode(int printEn);
 void displacementMode(void);
 void coordsMode(void);
 void speedMode(void);
+void timeMode(void);
 void disableInt();
 void enableInt();
 
@@ -85,6 +86,7 @@ char noGps[] = "Waiting for GPS";
  * Computes the distance between two coordinates by using the following formula (Haversine):
  *    Distance = (12742 * asin(0.5 - cos((c2[0]-c1[0])*p)/2 + cos(c1[0]*p) * cos(c2[0]*p) * (1-cos((c2[1]-c1[1])*p))/2)))*1000
  *
+ * 
  *  c1: First coordinate.
  *  c2: Second coordinate.
  *
@@ -108,9 +110,10 @@ int distance(double c1[2], double c2[2])
  *    2- Seperate the degrees part and the seconds part.
  *    3- Converts the degrees and seconds into decimal degrees.
  *
+ * 
  *  lat: Latitude.
  *  lon: Longitude.
- * 	ddCoord: The resultant DD coordinates.
+ *  ddCoord: The resultant DD coordinates.
  *
  *  returns: By reference, converted coordinates in DD.
  */
@@ -140,6 +143,7 @@ void convertCoords(char lat[10],char lon[10],double ddCoord[2])
  * --------------------
  * Sends data (character) to the LCD module in 4bit mode (nibble by nibble).
  *
+ * 
  *  data: Data to send to the LCD.
  *
  *  returns: Nothing.
@@ -173,6 +177,7 @@ void lcdData(char data)
  * --------------------
  * Sends command (byte) to the LCD module in 4bit mode (nibble by nibble).
  *
+ * 
  *  cmd: Command to send to the LCD.
  *
  *  returns: Nothing.
@@ -203,6 +208,7 @@ void lcdCmd(char cmd)
  * --------------------
  * Prints the given string on the LCD.
  *
+ * 
  *  str: Pointer to the location of the string.
  *  line: Determines the line position on the lCD. 0: Upper line, 1: Lower line. 
  *
@@ -365,9 +371,10 @@ char uart2Rcv(void)
  * --------------------
  * Parses(searches for) a NMEA sentence from the GPS data.
  *
+ * 
  *  prefix: Pointer to the location of the sentece prefix string.
  *  data: Pointer to the location of the GPS data string.
- *  sen: The parsed sentence.
+ *  sen: The parsed sentence. The size is 75 because the maximum size of the sentence is 80 character including the prefix.
  *
  *  returns: By referrence the parsed sentence.
  */
@@ -544,7 +551,7 @@ void nextMode(void)
 	}
 	switchMode();		//Print the mode title on the LCD
 
-	delay(500);
+	delay(500);		//Delay for software debouncing
 	enableInt();		//Enable the interrupts
 }
 
@@ -588,7 +595,7 @@ void altFunc(void)
 			break;
 	}
 
-	delay(200);
+	delay(200);						//Delay for debouncing
 	enableInt();
 }
 
@@ -603,6 +610,7 @@ void altFunc(void)
  *  3- Add the distance between the average coordinates and the last known average to the cumulative distance
  *  4- Print the total cumulative distance
  *
+ * 
  *  printEn: Enables the printing to the LCD. The printing is disabled to calculate the cumulative distance while in other modes
  * 
  *  returns: Nothing
@@ -777,13 +785,13 @@ void coordsMode(void)
  */
 void speedMode(void)
 {
-	if(mode != 3){switchMode();return;}//Make sure that we are in the correct mode
+	if(mode != 3){switchMode();return;}	//Make sure that we are in the correct mode
 
 	char sen[75]={0};//
-	parseSentence("GPVTG",gpsData,sen);//Parse the GPVTG sentence
+	parseSentence("GPVTG",gpsData,sen);	//Parse the GPVTG sentence
 	char val[10]= {0};
 	getSpeed(sen,val);
-	if(val[0]=='\0'){//Check if speed data is available, if not print no signal mode title on the LCD
+	if(val[0]=='\0'){			//Check if speed data is available, if not print no signal mode title on the LCD
 		lcdClearLine(0);
 		lcdPrint(speedNoSig,0);
 		return;
@@ -792,8 +800,57 @@ void speedMode(void)
 	lcdPrint(speedStr,0);
 	lcdClearLine(1);
 	lcdPrint((char *)val,1);
-	char unit[] = "Km/h";
 
+	char unit[] = "Km/h";
+	int i=0;
+	while(unit[i]!='\0'&&i<1024){		//Print the speed unit after the speed value
+		lcdData(unit[i]);
+		i++;
+	}
+}
+
+
+
+/*
+ * Function:  timeMode
+ * --------------------
+ * Displays the real time data obtained from the sattelite signal:
+ *  1- Fethcing the time data from the GPS module
+ *  2- Print the time data on the LCD
+ *
+ * 
+ *  returns: Nothing
+ */
+void timeMode(void)
+{
+	if(mode != 4){switchMode();return;}
+
+	char sen[75]={0};
+	parseSentence("GPGLL",gpsData,sen);
+
+	char val[6]= {0};
+	getTime(sen,val);
+	if(val[0]=='\0'){
+		lcdClearLine(0);
+		lcdPrint(timeNoSig,0);
+		return;
+	}
+
+	lcdClearLine(0);
+	lcdPrint(timeStr,0);
+	lcdClearLine(1);
+	lcdCmd(0xC0);
+
+	int j = 0;
+	while(val[j] != '\0'&&j<8){
+		if(j%2 == 0&&j!=0){
+			lcdData(':');
+		}
+			lcdData(val[j]);
+			j++;
+	}
+
+	char unit[] = " UTC";
 	int i=0;
 	while(unit[i]!='\0'&&i<1024){
 		lcdData(unit[i]);
@@ -801,118 +858,142 @@ void speedMode(void)
 	}
 }
 
-void timeMode(){
-  if(mode != 4){switchMode();return;}
-  char sen[75]={0};
-  parseSentence("GPGLL",gpsData,sen);
-  char val[6]= {0};
-  getTime(sen,val);
-  if(val[0]=='\0'){
-    lcdClearLine(0);
-    lcdPrint(timeNoSig,0);
-    return;
-  }
-  lcdClearLine(0);
-  lcdPrint(timeStr,0);
-  lcdClearLine(1);
-  // lcdPrint((char *)val,1);
-  lcdCmd(0xC0);
-  int j = 0;
-  while(val[j] != '\0'&&j<8){
-    if(j%2 == 0&&j!=0){
-      lcdData(':');
-    }
-    lcdData(val[j]);
-    j++;
-  }
-  char unit[] = " UTC";
-  int i=0;
-  while(unit[i]!='\0'&&i<1024){
-    lcdData(unit[i]);
-    i++;
-  }
-}
 
-void disableInt(){
-  detachInterrupt(PF_4);
-  detachInterrupt(PF_0);
-}
 
-void enableInt(){
-  attachInterrupt(PF_4, nextMode, FALLING);
-  attachInterrupt(PF_0, altFunc, FALLING);
+/*
+ * Function:  disableInt
+ * --------------------
+ * Disables the GPIO interrupt for PF_4, PF_0 (switches).
+ * 
+ * 
+ *  returns: Nothing
+ */
+void disableInt(void)
+{
+	detachInterrupt(PF_4);
+	detachInterrupt(PF_0);
 }
 
 
-void setup(){
-  delay(200);
-  Serial.begin(9600);
-  swInit();
-  redLedInit();
-  uart2Init();
-  delay(20);
-  lcdInit();
-  delay(500);
-  lcdClear();
-  lcdHome();
 
-    GPIO_PORTF_DATA_R |=0x02;
-     delay(200);
-     GPIO_PORTF_DATA_R &=~(0x02);
-     delay(200);
-        GPIO_PORTF_DATA_R |=0x02;
-     delay(200);
-     GPIO_PORTF_DATA_R &=~(0x02);
-    enableInt();
-    switchMode();
-    lcdClearLine(1);
-    lcdPrint(noGps,1);
+/*
+ * Function:  enableInt
+ * --------------------
+ * Enables the GPIO interrupt for PF4, PF0 (switches). Defines the ISR (Interrupt service routine) functions for each interrupt.
+ * 
+ * 
+ *  returns: Nothing
+ */
+void enableInt(void)
+{
+	attachInterrupt(PF_4, nextMode, FALLING);
+	attachInterrupt(PF_0, altFunc, FALLING);
 }
 
-void loop(){
-    // unsigned char sw2 = !((GPIO_PORTF_DATA_R & 0x01)>>0);
-    // unsigned char sw1 = !((GPIO_PORTF_DATA_R & 0x10)>>4);
 
-    char buf = uart2Rcv();
-    if(buf != '\0'){
-      // memset(c, 0, sizeof c);
-    int i=0;
-    while((buf!='\0')&&i<512&&!dataReady){
-        gpsData[i] = buf; 
-        buf = uart2Rcv();
-        i++;
-        }
-    while(i<512){
-      gpsData[i] = 0;
-      i++;
-    }
-        dataReady = 1;
-        // Serial.println(c);
-        return;
-    }
-    if(dataReady){
-        dataReady = 0;
-        switch(mode){
-        case 0:
-          distanceMode(1);
-        break;
-        case 1:
-          displacementMode();
-        break;
-        case 2:
-          coordsMode();
-        break;
-        case 3:
-          speedMode();
-        break;
-        case 4:
-          timeMode();
-        break;
-        default:
-        mode = 0;
-        break;
-        }
+
+/*
+ * Function:  setup
+ * --------------------
+ * Run once. Used for initializations. Provided by the Energia framework.
+ * Equivalent:
+ * 	int main(){
+ * 		setup();	//Run the setup function
+ * 		while(1){
+ * 		}
+ * 	}
+ * 
+ *  returns: Nothing
+ */
+void setup(void)
+{
+	delay(200);				//Wait for GPS and LCD modules to initialize after power up.
+
+	swInit();				//Initializes port F for the switches
+	redLedInit();				//Initializes port F for the built-in red LED
+
+	uart2Init();				//Initializes the UART2 module
+	delay(20);
+
+	lcdInit();				//Initializes port A and B for the LCD
+	delay(500);
+	lcdClear();
+	lcdHome();
+
+	/*
+		Blink twice indicating that the initialization is done
+	*/
+	GPIO_PORTF_DATA_R |=0x02;
+	delay(200);
+	GPIO_PORTF_DATA_R &=~(0x02);
+	delay(200);
+	GPIO_PORTF_DATA_R |=0x02;
+	delay(200);
+	GPIO_PORTF_DATA_R &=~(0x02);
+
+	enableInt();				//Enable the switch interrupts (Allow input)
+	switchMode();
+	lcdClearLine(1);
+	lcdPrint(noGps,1);			//Initially print "Waiting for GPS" on the LCD 
+}
+
+
+
+/*
+ * Function:  loop
+ * --------------------
+ * Loop forever. Used for executing the code. Provided by the Energia framework.
+ * Equivalent:
+ * 	int main(){
+ * 
+ * 		while(1){
+ * 			loop(); 	//Run the loop function
+ * 		}
+ * 	}
+ * 
+ *  returns: Nothing
+ */
+void loop(void)
+{
+	char buf = uart2Rcv();
+	
+	if(buf != '\0'){
+		int i=0;
+		while((buf!='\0')&&i<512&&!dataReady){
+			gpsData[i] = buf; 
+			buf = uart2Rcv();
+			i++;
+		}
+		while(i<512){
+			gpsData[i] = 0;
+			i++;
+		}
+		dataReady = 1;
+		return;
+	}
+
+	if(dataReady){
+		dataReady = 0;
+		switch(mode){
+			case 0:
+				distanceMode(1);
+				break;
+			case 1:
+				displacementMode();
+				break;
+			case 2:
+				coordsMode();
+				break;
+			case 3:
+				speedMode();
+				break;
+			case 4:
+				timeMode();
+				break;
+			default:
+				mode = 0;
+				break;
+		}
 		distanceMode(0);
-    }
+	}
   }
-
