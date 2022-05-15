@@ -956,7 +956,7 @@ void setup(void)
 void loop(void)
 {
 	char buf = uart2Rcv();
-	
+
 	if(buf != '\0'){
 		int i=0;
 		while((buf!='\0')&&i<512&&!dataReady){
@@ -994,6 +994,7 @@ void loop(void)
 				mode = 0;
 				break;
 		}
+		
 		distanceMode(0);
 	}
   }
