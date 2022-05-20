@@ -605,7 +605,7 @@ void altFunc(void)
  * Function:  distanceMode
  * --------------------
  * Calculates the cumulative distance by:
- *  1- Fethcing the current coordinates from the GPS module
+ *  1- Fetching the current coordinates from the GPS module
  *  2- Calculating a moving average of the coordinates to minimize the error
  *  3- Add the distance between the average coordinates and the last known average to the cumulative distance
  *  4- Print the total cumulative distance
@@ -682,7 +682,7 @@ void distanceMode(int printEn)
  * Function:  displacementMode
  * --------------------
  * Calculates the displacement covered by:
- *  1- Fethcing the current coordinates from the GPS module
+ *  1- Fetching the current coordinates from the GPS module
  *  2- Calculate the distance between the origin coordinates and the current coordinates
  *  3- Print the displacement
  *
@@ -733,7 +733,7 @@ void displacementMode(void)
  * Function:  coordsMode
  * --------------------
  * Displays the current coordinates fetched from the GPS module:
- *  1- Fethcing the current coordinates from the GPS module
+ *  1- Fetching the current coordinates from the GPS module
  *  2- Print the coordinates on the LCD
  *
  * 
@@ -777,7 +777,7 @@ void coordsMode(void)
  * Function:  speedMode
  * --------------------
  * Displays the ground speed fetched from the GPS module:
- *  1- Fethcing the ground speed data from the GPS module
+ *  1- Fetching the ground speed data from the GPS module
  *  2- Print the speed on the LCD
  *
  * 
@@ -815,7 +815,7 @@ void speedMode(void)
  * Function:  timeMode
  * --------------------
  * Displays the real time data obtained from the sattelite signal:
- *  1- Fethcing the time data from the GPS module
+ *  1- Fetching the time data from the GPS module
  *  2- Print the time data on the LCD
  *
  * 
