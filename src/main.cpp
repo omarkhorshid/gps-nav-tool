@@ -160,7 +160,7 @@ void lcdData(char data)
 	delayMicroseconds(200);
 	GPIO_PORTA_DATA_R &=~(0x0C);	//Clear RS and EN
 	GPIO_PORTA_DATA_R |= (1<<2);	//RS HIGH
-	GPIO_PORTB_DATA_R = data;	//Write the lower nibbleof the data
+	GPIO_PORTB_DATA_R = data;	//Write the lower nibble of the data
 	GPIO_PORTA_DATA_R |=(1<<3);	//EN HIGH
 
 	delayMicroseconds(200);
